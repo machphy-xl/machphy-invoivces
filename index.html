@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MachPhy Proforma Invoice Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --surface-2: #f1f1ef;
+    --border: #e3e3df;
+    --text: #1a1a1a;
+    --text-2: #5a5a55;
+    --text-3: #8a8a85;
+    --accent: #2563eb;
+    --accent-bg: #eff6ff;
+    --accent-border: #bfdbfe;
+    --success: #047857;
+    --success-bg: #ecfdf5;
+    --warning: #b45309;
+    --warning-bg: #fffbeb;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 0.5px rgba(0,0,0,0.06);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 22px; margin: 0; font-weight: 600; }
+  h2 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
+  h3 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+  p { margin: 0; }
+
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .header-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .ref-pill { font-family: var(--mono); font-size: 13px; color: var(--text-2); background: var(--surface); padding: 6px 10px; border-radius: var(--radius-sm); border: 0.5px solid var(--border); }
+
+  .card { background: var(--surface); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-full { grid-column: 1 / -1; }
+  @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  label { font-size: 12px; color: var(--text-2); display: block; margin-bottom: 4px; }
+  input, select, textarea, button { font-family: inherit; font-size: 14px; }
+  input[type="text"], input[type="number"], input[type="date"], input[type="password"], select, textarea {
+    width: 100%; padding: 8px 10px; border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border); background: var(--surface); color: var(--text);
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+  textarea { resize: vertical; min-height: 56px; }
+
+  button { padding: 8px 14px; border-radius: var(--radius-sm); border: 0.5px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-weight: 500; transition: background 0.1s; }
+  button:hover { background: var(--surface-2); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  button.primary:hover:not(:disabled) { background: #1d4ed8; }
+  button.primary:disabled { background: var(--accent); opacity: 0.5; }
+  button.small { padding: 4px 10px; font-size: 12px; }
+
+  .add-row { display: grid; grid-template-columns: 2fr 1fr auto auto; gap: 8px; align-items: end; }
+  .custom-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 10px; }
+  @media (max-width: 600px) { .add-row, .custom-row { grid-template-columns: 1fr; } }
+
+  details summary { font-size: 13px; color: var(--text-2); cursor: pointer; user-select: none; margin-top: 12px; }
+
+  .line-items { background: var(--surface); border-radius: var(--radius); border: 0.5px solid var(--border); overflow: hidden; }
+  .line-item { display: grid; grid-template-columns: 1fr 70px 100px 120px auto; gap: 8px; align-items: center; padding: 12px 14px; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+  .line-item:last-child { border-bottom: none; }
+  .line-item-name { font-weight: 500; }
+  .line-item-meta { font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+  .empty-state { padding: 32px; text-align: center; color: var(--text-3); font-size: 14px; }
+
+  .totals-grid { border-top: 0.5px solid var(--border); padding-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px; }
+  .totals-grid .label { color: var(--text-2); }
+  .totals-grid .value { text-align: right; }
+  .totals-grid .strong { font-weight: 600; }
+  .words-row { grid-column: 1 / -1; font-size: 12px; color: var(--text-2); margin-top: 4px; }
+
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .actions button { flex: 1; min-width: 140px; }
+  .actions .primary { flex: 2; min-width: 220px; }
+
+  .status { font-size: 13px; color: var(--text-2); min-height: 24px; padding: 4px 0; }
+  .status a { color: var(--accent); word-break: break-all; }
+  .status.success { color: var(--success); }
+  .status.error { color: var(--danger); }
+
+  .banner { padding: 10px 14px; border-radius: var(--radius); margin-bottom: 14px; font-size: 13px; display: none; }
+  .banner.success { background: var(--success-bg); color: var(--success); display: block; }
+  .banner.warning { background: var(--warning-bg); color: var(--warning); display: block; }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: flex-start; justify-content: center; padding: 60px 20px 20px; z-index: 100; overflow-y: auto; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius); padding: 20px 22px; width: 100%; max-width: 620px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .modal-section { border-top: 0.5px solid var(--border); padding-top: 14px; margin-top: 14px; }
+  .modal-section:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+  .catalog-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+  .catalog-item:last-child { border-bottom: none; }
+  .catalog-specs { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+  .catalog-specs div { padding: 1px 0; }
+
+  .footer-note { text-align: center; color: var(--text-3); font-size: 12px; margin-top: 40px; }
+
+  .ref-source-tag, .cat-source-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.5px; }
+  .ref-source-tag.server, .cat-source-tag.server { background: var(--success-bg); color: var(--success); }
+  .ref-source-tag.local, .cat-source-tag.local { background: var(--warning-bg); color: var(--warning); }
+
+  .info-block { background: var(--accent-bg); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-2); margin-bottom: 12px; }
+  .info-block a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1>Proforma invoice generator</h1>
+      <p style="color: var(--text-2); font-size: 13px; margin-top: 4px;">Machphy Solutions Private Limited · Team edition</p>
+    </div>
+    <div class="header-meta">
+      <span class="ref-pill"><span id="ref-display">PI-MS-2627-001</span> <span id="ref-source" class="ref-source-tag local">local</span></span>
+      <button id="settings-btn" class="small">Settings</button>
+    </div>
+  </div>
+
+  <div id="connection-banner" class="banner"></div>
+
+  <div class="card">
+    <h2>Customer details</h2>
+    <div class="grid-2">
+      <div><label>Bill to (company name)</label><input type="text" id="bill-to" placeholder="e.g. Zoom Communications Pvt Ltd" /></div>
+      <div><label>Place of supply</label><input type="text" id="place-supply" placeholder="e.g. Gurgaon" /></div>
+      <div class="grid-full"><label>Billing address (optional, multi-line)</label><textarea id="bill-address" rows="2" placeholder="Street, City, State, PIN"></textarea></div>
+      <div><label>Customer GSTIN (optional)</label><input type="text" id="cust-gstin" placeholder="e.g. 06AAACZ1234A1Z5" /></div>
+      <div><label>Contact / email (optional)</label><input type="text" id="cust-contact" placeholder="contact@example.com" /></div>
+      <div><label>Date</label><input type="date" id="invoice-date" /></div>
+      <div><label>Reference number</label><input type="text" id="ref-number" style="font-family: var(--mono);" /></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+      <h2 style="margin: 0;">Add product from catalog <span id="cat-source" class="cat-source-tag local" style="margin-left: 6px;">local</span></h2>
+      <div style="display: flex; gap: 6px;">
+        <button id="refresh-catalog-btn" class="small">Refresh catalog</button>
+        <button id="manage-catalog-btn" class="small">View catalog</button>
+      </div>
+    </div>
+    <div class="add-row">
+      <div><label>Product</label><select id="product-select"></select></div>
+      <div><label>Quantity</label><input type="number" id="qty-input" value="1" min="1" step="1" /></div>
+      <button id="add-item-btn">Add</button>
+    </div>
+    <details>
+      <summary>Or add a custom one-off line item</summary>
+      <div class="custom-row">
+        <div><label>Description</label><input type="text" id="custom-desc" placeholder="Description" /></div>
+        <div><label>HSN</label><input type="text" id="custom-hsn" placeholder="HSN" /></div>
+        <div><label>Qty</label><input type="number" id="custom-qty" value="1" min="1" step="1" /></div>
+        <div><label>Rate</label><input type="number" id="custom-rate" value="0" min="0" step="0.01" /></div>
+        <button id="add-custom-btn">Add</button>
+      </div>
+    </details>
+  </div>
+
+  <h2 style="margin: 20px 0 10px;">Line items</h2>
+  <div id="line-items-list" class="line-items">
+    <div class="empty-state">No items added yet. Pick a product above.</div>
+  </div>
+
+  <div class="card" style="margin-top: 14px;">
+    <h2>Totals</h2>
+    <div class="grid-2" style="margin-bottom: 14px;">
+      <div><label>Discount type</label><select id="discount-type"><option value="amount">Flat amount</option><option value="percent">Percentage (%)</option></select></div>
+      <div><label>Discount value</label><input type="number" id="discount-value" value="0" min="0" step="0.01" /></div>
+      <div><label>GST rate (%)</label><input type="number" id="gst-rate" value="18" min="0" max="100" step="0.01" /></div>
+      <div><label>Lead time / advance note</label><input type="text" id="terms-note" value="60 days from date of order, 100% advance" /></div>
+    </div>
+    <div class="totals-grid">
+      <div class="label">Subtotal</div><div class="value" id="t-subtotal">₹ 0.00</div>
+      <div class="label">Discount</div><div class="value" id="t-discount">₹ 0.00</div>
+      <div class="label">Taxable value</div><div class="value" id="t-taxable">₹ 0.00</div>
+      <div class="label">GST <span id="t-gst-rate-label">(18%)</span></div><div class="value" id="t-gst">₹ 0.00</div>
+      <div class="label strong">Grand total</div><div class="value strong" id="t-total">₹ 0.00</div>
+      <div class="words-row" id="t-words">Zero rupees only</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="preview-btn">Preview invoice</button>
+    <button id="download-btn">Download only</button>
+    <button id="submit-btn" class="primary">Submit &amp; save to Drive</button>
+  </div>
+
+  <div id="status-msg" class="status"></div>
+
+  <p class="footer-note">MachPhy Solutions Pvt Ltd · This page runs entirely in your browser. Catalog and counter live in the team's Apps Script.</p>
+</div>
+
+<div id="catalog-modal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Catalog</h2>
+      <button id="close-catalog-btn" class="small">Close</button>
+    </div>
+    <div id="catalog-info" class="info-block" style="display:none;"></div>
+    <div id="catalog-list"></div>
+  </div>
+</div>
+
+<div id="settings-modal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button id="close-settings-btn" class="small">Close</button>
+    </div>
+
+    <div class="modal-section">
+      <h3>Your identity (for audit log)</h3>
+      <label>Your name or email</label>
+      <input type="text" id="user-name-input" placeholder="e.g. Ritambhara Rout" />
+      <p style="font-size: 12px; color: var(--text-3); margin-top: 6px;">Recorded in the audit log so the team can see who generated each invoice.</p>
+    </div>
+
+    <div class="modal-section">
+      <h3>Google Apps Script integration</h3>
+      <label>Web app URL</label>
+      <input type="text" id="gas-url-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-family: var(--mono); font-size: 12px;" />
+      <label style="margin-top: 8px;">Shared secret token</label>
+      <input type="password" id="gas-token-input" placeholder="The SHARED_SECRET from Code.gs" style="font-family: var(--mono); font-size: 12px;" />
+      <div style="display: flex; gap: 8px; margin-top: 10px;">
+        <button id="test-connection-btn">Test connection</button>
+        <button id="save-gas-btn">Save</button>
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <h3>Reference number (admin)</h3>
+      <p style="font-size: 12px; color: var(--text-3); margin-bottom: 8px;">Sets the next number for the whole team on the server.</p>
+      <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px;">
+        <input type="number" id="next-num-input" placeholder="Next number" min="1" step="1" />
+        <button id="refresh-counter-btn">Refresh from server</button>
+        <button id="save-counter-btn">Set on server</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const FALLBACK_CATALOG = [
+    {id:'p1', name:'Cold Transport Box for Labs', code:'MSTCB100LP10', hsn:'', rate:13600, specs:['Bag Capacity: 70L','Temperature Range: +2 to +8 deg C','Temperature Backup at 50 deg C ambient: 10 hrs','Total Box weight: 9 kg']},
+    {id:'p2', name:'Cold Transport Box for Logistics', code:'MSTCB100LN10', hsn:'', rate:14800, specs:['Bag Capacity: 100L','Temperature Range: -20 to -18 deg C','Temperature Backup at 50 deg C ambient: 10 hrs','Total Bag weight: 11 kg']},
+    {id:'p3', name:'Anti-freeze Transport Box for Logistics', code:'MSAF100LP10', hsn:'', rate:21450, specs:['Bag Capacity: 100L','Temperature Range: +2 to +8 deg C','Temperature Backup at -50 deg C ambient: 24 hrs','Total Bag weight: 12 kg']}
+  ];
+  const REF_PREFIX = 'PI-MS-2627';
+  const CUR_PDF = 'Rs.';
+
+  let catalog = [];
+  let catalogSource = 'local';
+  let catalogSheetUrl = '';
+  let lineItems = [];
+  let localNextNum = 1;
+  let serverRefSynced = false;
+  let gasUrl = '';
+  let gasToken = '';
+  let userName = '';
+
+  const $ = id => document.getElementById(id);
+  const fmtUi = n => '\u20B9 ' + Number(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmtPdf = n => CUR_PDF + ' ' + Number(n).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const refStr = num => REF_PREFIX + '-' + String(num).padStart(3,'0');
+  const escapeHtml = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+  function loadLocal(){
+    try { const c = localStorage.getItem('machphy_catalog_cache'); catalog = c ? JSON.parse(c) : FALLBACK_CATALOG.slice(); }
+    catch { catalog = FALLBACK_CATALOG.slice(); }
+    localNextNum = parseInt(localStorage.getItem('machphy_local_num') || '1');
+    gasUrl = localStorage.getItem('machphy_gas_url') || '';
+    gasToken = localStorage.getItem('machphy_gas_token') || '';
+    userName = localStorage.getItem('machphy_user_name') || '';
+  }
+  function cacheCatalog(){ localStorage.setItem('machphy_catalog_cache', JSON.stringify(catalog)); }
+  function saveLocalNum(){ localStorage.setItem('machphy_local_num', String(localNextNum)); }
+  function saveGas(){ localStorage.setItem('machphy_gas_url', gasUrl); localStorage.setItem('machphy_gas_token', gasToken); }
+  function saveUserName(){ localStorage.setItem('machphy_user_name', userName); }
+
+  async function gasCall(action, extra){
+    if (!gasUrl || !gasToken) throw new Error('Apps Script not configured');
+    const body = new URLSearchParams();
+    body.append('token', gasToken);
+    body.append('action', action);
+    if (extra) for (const k in extra) body.append(k, extra[k]);
+    const res = await fetch(gasUrl, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Unknown error');
+    return json;
+  }
+
+  async function peekServerRef(){
+    try {
+      const r = await gasCall('peek_ref');
+      $('ref-number').value = r.nextRef;
+      $('ref-display').textContent = r.nextRef;
+      $('ref-source').textContent = 'server';
+      $('ref-source').className = 'ref-source-tag server';
+      serverRefSynced = true;
+      return r;
+    } catch(err){
+      $('ref-source').textContent = 'local';
+      $('ref-source').className = 'ref-source-tag local';
+      $('ref-number').value = refStr(localNextNum);
+      $('ref-display').textContent = refStr(localNextNum);
+      serverRefSynced = false;
+      return null;
+    }
+  }
+
+  async function loadServerCatalog(silent){
+    if (!gasUrl || !gasToken){
+      catalogSource = 'local';
+      updateCatalogSourceTag();
+      renderProductSelect();
+      if (!silent) setStatus('No Apps Script configured, using local catalog cache.', 'error');
+      return false;
+    }
+    try {
+      if (!silent) setStatus('Fetching catalog from server...');
+      const r = await gasCall('get_catalog');
+      if (Array.isArray(r.catalog) && r.catalog.length > 0){
+        catalog = r.catalog;
+        catalogSource = 'server';
+        catalogSheetUrl = r.sheetUrl || '';
+        cacheCatalog();
+        updateCatalogSourceTag();
+        renderProductSelect();
+        if (!silent) setStatus('Catalog refreshed: ' + catalog.length + ' products loaded from server.', 'success');
+        return true;
+      } else {
+        catalogSource = 'local';
+        updateCatalogSourceTag();
+        renderProductSelect();
+        if (!silent) setStatus('Server returned no products. Using local cache. Admin: add rows to the Products sheet.', 'error');
+        return false;
+      }
+    } catch(err){
+      catalogSource = 'local';
+      updateCatalogSourceTag();
+      renderProductSelect();
+      if (!silent) setStatus('Could not fetch catalog: ' + err.message + '. Using local cache.', 'error');
+      return false;
+    }
+  }
+
+  function updateCatalogSourceTag(){
+    const el = $('cat-source');
+    el.textContent = catalogSource;
+    el.className = 'cat-source-tag ' + catalogSource;
+  }
+
+  function renderProductSelect(){
+    if (!catalog.length){
+      $('product-select').innerHTML = '<option value="">(no products)</option>';
+      return;
+    }
+    $('product-select').innerHTML = catalog.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} — ${escapeHtml(p.code)} — ${fmtUi(p.rate)}</option>`).join('');
+  }
+
+  function renderCatalog(){
+    const info = $('catalog-info');
+    if (catalogSource === 'server'){
+      info.style.display = 'block';
+      info.innerHTML = 'Shared catalog (' + catalog.length + ' products) loaded from the team Products sheet. ' +
+        (catalogSheetUrl ? '<a href="' + escapeHtml(catalogSheetUrl) + '" target="_blank">Open the sheet to edit</a>. After edits, click Refresh catalog.' : 'Edit the Products sheet in Drive, then click Refresh catalog.');
+    } else {
+      info.style.display = 'block';
+      info.innerHTML = 'Using <strong>local cached</strong> catalog. Configure Apps Script in Settings to use the shared team catalog.';
+    }
+
+    const list = $('catalog-list');
+    if (!catalog.length){ list.innerHTML = '<p style="font-size:13px; color:var(--text-3); padding: 12px 0;">Catalog is empty.</p>'; return; }
+    list.innerHTML = catalog.map(p => `
+      <div class="catalog-item">
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:500;">${escapeHtml(p.name)}</div>
+          <div style="font-size:12px; color:var(--text-2); font-family:var(--mono);">${escapeHtml(p.code)}${p.hsn ? ' · HSN ' + escapeHtml(p.hsn) : ''}</div>
+          <div style="font-size:13px; color:var(--text); margin-top:4px; font-weight:500;">${fmtUi(p.rate)}</div>
+          ${p.specs && p.specs.length ? '<div class="catalog-specs">' + p.specs.map(s => '<div>· ' + escapeHtml(s) + '</div>').join('') + '</div>' : ''}
+        </div>
+      </div>`).join('');
+  }
+
+  function renderLineItems(){
+    const wrap = $('line-items-list');
+    if (!lineItems.length){ wrap.innerHTML = '<div class="empty-state">No items added yet. Pick a product above.</div>'; return; }
+    wrap.innerHTML = lineItems.map((it, i) => `
+      <div class="line-item">
+        <div style="min-width:0;">
+          <div class="line-item-name">${escapeHtml(it.name)}</div>
+          <div class="line-item-meta">${escapeHtml(it.code || '')}${it.hsn ? ' · HSN ' + escapeHtml(it.hsn) : ''}</div>
+        </div>
+        <input type="number" min="1" step="1" value="${it.qty}" data-idx="${i}" data-field="qty" />
+        <input type="number" min="0" step="0.01" value="${it.rate}" data-idx="${i}" data-field="rate" />
+        <div style="text-align:right;">${fmtUi(it.qty * it.rate)}</div>
+        <button data-rm="${i}" class="small">×</button>
+      </div>`).join('');
+    wrap.querySelectorAll('input[data-idx]').forEach(inp => {
+      inp.onchange = () => { lineItems[+inp.dataset.idx][inp.dataset.field] = parseFloat(inp.value) || 0; renderLineItems(); recalc(); };
+    });
+    wrap.querySelectorAll('[data-rm]').forEach(btn => {
+      btn.onclick = () => { lineItems.splice(+btn.dataset.rm, 1); renderLineItems(); recalc(); };
+    });
+  }
+
+  function recalc(){
+    const subtotal = lineItems.reduce((s, it) => s + it.qty * it.rate, 0);
+    const dType = $('discount-type').value;
+    const dVal = parseFloat($('discount-value').value) || 0;
+    const discount = dType === 'percent' ? subtotal * dVal / 100 : Math.min(dVal, subtotal);
+    const taxable = Math.max(0, subtotal - discount);
+    const gstRate = parseFloat($('gst-rate').value) || 0;
+    const gst = taxable * gstRate / 100;
+    const total = taxable + gst;
+    $('t-subtotal').textContent = fmtUi(subtotal);
+    $('t-discount').textContent = fmtUi(discount);
+    $('t-taxable').textContent = fmtUi(taxable);
+    $('t-gst').textContent = fmtUi(gst);
+    $('t-gst-rate-label').textContent = '(' + gstRate + '%)';
+    $('t-total').textContent = fmtUi(total);
+    $('t-words').textContent = numberToWords(total);
+    return {subtotal, discount, taxable, gst, gstRate, total};
+  }
+
+  function numberToWords(num){
+    if (num === 0) return 'Zero rupees only';
+    const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    function two(n){ if (n < 20) return a[n]; const t = Math.floor(n/10), r = n%10; return b[t] + (r ? ' ' + a[r] : ''); }
+    function three(n){ const h = Math.floor(n/100), r = n%100; return (h ? a[h] + ' Hundred' + (r ? ' ' : '') : '') + (r ? two(r) : ''); }
+    const rupees = Math.floor(num);
+    const paise = Math.round((num - rupees) * 100);
+    let n = rupees, parts = [];
+    const crore = Math.floor(n/10000000); n %= 10000000;
+    const lakh = Math.floor(n/100000); n %= 100000;
+    const thousand = Math.floor(n/1000); n %= 1000;
+    if (crore) parts.push(two(crore) + ' Crore');
+    if (lakh) parts.push(two(lakh) + ' Lakh');
+    if (thousand) parts.push(two(thousand) + ' Thousand');
+    if (n) parts.push(three(n));
+    let result = 'Rupees ' + parts.join(' ');
+    if (paise) result += ' and ' + two(paise) + ' Paise';
+    return result + ' only';
+  }
+
+  function setStatus(msg, kind){ const el = $('status-msg'); el.textContent = msg; el.className = 'status' + (kind ? ' ' + kind : ''); }
+
+  function updateBanner(){
+    const b = $('connection-banner');
+    if (gasUrl && gasToken){
+      b.className = 'banner success';
+      b.textContent = 'Drive integration active. Submit will upload to shared Drive folder, use server counter, and shared catalog.' + (userName ? ' Signed in as: ' + userName : ' (Set your name in Settings for audit log)');
+    } else {
+      b.className = 'banner warning';
+      b.textContent = 'Drive integration not configured. Open Settings to add Apps Script URL and token from your team admin.';
+    }
+  }
+
+  function fitText(doc, text, maxWidth, startSize, minSize){
+    let size = startSize;
+    while (size >= minSize){
+      doc.setFontSize(size);
+      if (doc.getTextWidth(text) <= maxWidth) return {text, fontSize: size};
+      size -= 0.5;
+    }
+    doc.setFontSize(minSize);
+    let truncated = text;
+    while (truncated.length > 4 && doc.getTextWidth(truncated + '...') > maxWidth) truncated = truncated.slice(0, -1);
+    return {text: truncated + '...', fontSize: minSize};
+  }
+
+  function buildItemDescription(it){
+    let s = it.name;
+    if (it.code) s += '\nCatalog No.: ' + it.code;
+    if (it.specs && it.specs.length) it.specs.forEach(sp => { s += '\n' + sp; });
+    return s;
+  }
+
+  function formatDate(iso){
+    if (!iso) return '';
+    const d = new Date(iso);
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${String(d.getDate()).padStart(2,'0')}-${months[d.getMonth()]}-${String(d.getFullYear()).slice(2)}`;
+  }
+
+  function buildPdf(refOverride){
+    const totals = recalc();
+    const billTo = $('bill-to').value.trim() || '-';
+    const placeSupply = $('place-supply').value.trim() || '-';
+    const billAddr = $('bill-address').value.trim();
+    const custGstin = $('cust-gstin').value.trim();
+    const custContact = $('cust-contact').value.trim();
+    const dateStr = formatDate($('invoice-date').value);
+    const ref = refOverride || $('ref-number').value.trim() || refStr(localNextNum);
+    const termsNote = $('terms-note').value.trim();
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({unit:'pt', format:'a4'});
+    const W = doc.internal.pageSize.getWidth();
+    const M = 36;
+
+    doc.setLineWidth(0.5);
+    doc.rect(M, M, W - 2*M, 36);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(11);
+    doc.text('PROFORMA INVOICE', W/2, M + 22, {align:'center'});
+
+    let y = M + 36;
+    doc.rect(M, y, W - 2*M, 80);
+    doc.setFontSize(16);
+    doc.text('MACHPHY SOLUTIONS PRIVATE LIMITED', W/2, y + 28, {align:'center'});
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.text('2-C-1, RESEARCH INNOVATION PARK, IIT DELHI', W/2, y + 42, {align:'center'});
+    doc.text('HAUZ KHAS, DELHI, INDIA-110016', W/2, y + 53, {align:'center'});
+    doc.text('email: info@machphy.com, business@machphy.com  |  website: www.machphy.com', W/2, y + 64, {align:'center'});
+    doc.setFont('helvetica','bold');
+    doc.text('GSTIN No. 21AAKCM8390E1ZF', W/2, y + 75, {align:'center'});
+
+    y += 80;
+    const colW = (W - 2*M) / 2;
+    const metaW = 160;
+    doc.rect(M, y, colW - metaW/2, 60);
+    doc.rect(M + colW - metaW/2, y, colW - metaW/2, 60);
+    doc.rect(W - M - metaW, y, metaW/2, 30);
+    doc.rect(W - M - metaW/2, y, metaW/2, 30);
+    doc.rect(W - M - metaW, y + 30, metaW/2, 30);
+    doc.rect(W - M - metaW/2, y + 30, metaW/2, 30);
+
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.text('Bill to', M + 6, y + 12);
+    doc.text('Place of Supply', M + colW - metaW/2 + 6, y + 12);
+    doc.text('Estimate No.', W - M - metaW + metaW/4, y + 12, {align:'center'});
+    doc.text('Dated', W - M - metaW/4, y + 12, {align:'center'});
+
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    const billLines = [billTo];
+    if (billAddr) billAddr.split('\n').forEach(l => billLines.push(l));
+    if (custGstin) billLines.push('GSTIN: ' + custGstin);
+    if (custContact) billLines.push(custContact);
+    let by = y + 26;
+    billLines.slice(0,4).forEach(l => { doc.text(String(l).substring(0,55), M + 6, by); by += 10; });
+    doc.text(placeSupply, M + colW - metaW/2 + 6, y + 26);
+
+    doc.setFont('helvetica','bold');
+    doc.text(ref, W - M - metaW + metaW/4, y + 48, {align:'center'});
+    doc.text(dateStr, W - M - metaW/4, y + 48, {align:'center'});
+
+    y += 60;
+
+    const body = lineItems.map(it => [buildItemDescription(it), it.hsn || '', String(it.qty), 'pcs', fmtPdf(it.rate), fmtPdf(it.qty * it.rate)]);
+
+    doc.autoTable({
+      startY: y,
+      head: [['DESCRIPTION OF GOODS','HSN CODE','QTY','UNITS','RATE','AMOUNT']],
+      body: body.length ? body : [['','','','','','']],
+      theme: 'grid',
+      styles: {fontSize:8, cellPadding:5, lineColor:[0,0,0], lineWidth:0.3, textColor:[0,0,0], overflow:'linebreak'},
+      headStyles: {fillColor:[255,255,255], textColor:[0,0,0], fontStyle:'bold', halign:'center'},
+      columnStyles: { 0:{cellWidth:215}, 1:{cellWidth:55, halign:'center'}, 2:{cellWidth:35, halign:'center'}, 3:{cellWidth:35, halign:'center'}, 4:{cellWidth:75, halign:'right'}, 5:{cellWidth:'auto', halign:'right'} },
+      margin: {left: M, right: M}
+    });
+
+    let ay = doc.lastAutoTable.finalY;
+    const labelW = 320, rateW = 70;
+    const amtW = W - 2*M - labelW - rateW;
+    const innerPad = 6;
+
+    function totalRow(label, val, bold, rate){
+      doc.rect(M, ay, labelW, 22);
+      doc.rect(M + labelW, ay, rateW, 22);
+      doc.rect(M + labelW + rateW, ay, amtW, 22);
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(9);
+      doc.text(label, M + innerPad, ay + 14);
+      if (rate) doc.text(rate, M + labelW + rateW/2, ay + 14, {align:'center'});
+      const amtRightEdge = W - M - innerPad;
+      const maxAmtWidth = amtRightEdge - (M + labelW + rateW + innerPad);
+      const fitted = fitText(doc, val, maxAmtWidth, 9, 7);
+      doc.setFontSize(fitted.fontSize);
+      doc.text(fitted.text, amtRightEdge, ay + 14, {align:'right'});
+      doc.setFontSize(9);
+      ay += 22;
+    }
+    totalRow('Total', fmtPdf(totals.subtotal), true);
+    totalRow('Less Discount', totals.discount > 0 ? '- ' + fmtPdf(totals.discount) : '-', false);
+    totalRow('Taxable Value', fmtPdf(totals.taxable), true);
+    totalRow('ADD GST ' + totals.gstRate + '%', fmtPdf(totals.gst), false, totals.gstRate.toFixed(1) + '%');
+    totalRow('Total', fmtPdf(totals.total), true);
+
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.rect(M, ay, W - 2*M, 16);
+    const wordsText = 'Amount Chargeable (in words): ' + numberToWords(totals.total);
+    const wordsFitted = fitText(doc, wordsText, W - 2*M - 12, 8, 6);
+    doc.setFontSize(wordsFitted.fontSize);
+    doc.text(wordsFitted.text, M + 6, ay + 11);
+    doc.setFontSize(8);
+    ay += 16;
+
+    doc.rect(M, ay, W - 2*M, 70);
+    doc.setFont('helvetica','bold');
+    doc.text("Company's PAN: AAKCM8390E", M + 6, ay + 12);
+    doc.setFont('helvetica','normal');
+    doc.text('Note: Please make cheques in favor of "Machphy Solutions Private Limited"', M + 6, ay + 26);
+    const terms = [
+      'All prices are quoted in Indian Rupees and payment terms are as per agreement. Lead time period is ' + (termsNote || '60 days from date of order, 100% advance'),
+      "Goods & services once sold won't be exchanged, replaced or taken back",
+      'Price prevailing at the time of purchase will be applicable',
+      'All disputes are subject to Delhi Jurisdiction'
+    ];
+    let ty = ay + 38;
+    terms.forEach(t => {
+      const fitted = fitText(doc, '\u2022 ' + t, (W - 2*M) * 0.6 - 12, 8, 6);
+      doc.setFontSize(fitted.fontSize);
+      doc.text(fitted.text, M + 6, ty);
+      doc.setFontSize(8);
+      ty += 10;
+    });
+
+    doc.text('For Machphy Solutions Private Limited', W - M - 6, ay + 26, {align:'right'});
+    doc.text('Authorised Signatory', W - M - 6, ay + 60, {align:'right'});
+
+    ay += 70;
+    doc.setFontSize(8);
+    doc.text('Please share order copy at business@machphy.com', M, ay + 12);
+
+    return {doc, ref};
+  }
+
+  function pdfToBase64(doc){ return doc.output('datauristring').split(',')[1]; }
+
+  async function uploadToDrive(filename, base64){
+    const formData = new URLSearchParams();
+    formData.append('token', gasToken);
+    formData.append('filename', filename);
+    formData.append('pdfBase64', base64);
+    if (userName) formData.append('user', userName);
+    const res = await fetch(gasUrl, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: formData.toString() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Unknown error');
+    return json;
+  }
+
+  async function init(){
+    $('invoice-date').value = new Date().toISOString().slice(0,10);
+    $('ref-number').value = refStr(localNextNum);
+    $('ref-display').textContent = refStr(localNextNum);
+    renderProductSelect();
+    updateCatalogSourceTag();
+    renderLineItems();
+    recalc();
+    updateBanner();
+
+    if (gasUrl && gasToken){
+      await peekServerRef();
+      await loadServerCatalog(true);
+    }
+
+    $('add-item-btn').onclick = () => {
+      const p = catalog.find(x => x.id === $('product-select').value);
+      if (!p){ setStatus('No product selected', 'error'); return; }
+      lineItems.push({name:p.name, code:p.code, hsn:p.hsn, rate:p.rate, qty:parseInt($('qty-input').value)||1, specs:(p.specs||[]).slice()});
+      renderLineItems(); recalc(); setStatus('Added: ' + p.name);
+    };
+
+    $('add-custom-btn').onclick = () => {
+      const desc = $('custom-desc').value.trim();
+      if (!desc){ setStatus('Description required for custom item', 'error'); return; }
+      lineItems.push({name:desc, code:'', hsn:$('custom-hsn').value.trim(), rate:parseFloat($('custom-rate').value)||0, qty:parseInt($('custom-qty').value)||1, specs:[]});
+      $('custom-desc').value=''; $('custom-hsn').value=''; $('custom-qty').value='1'; $('custom-rate').value='0';
+      renderLineItems(); recalc(); setStatus('Custom item added');
+    };
+
+    ['discount-type','discount-value','gst-rate'].forEach(id => { $(id).oninput = recalc; $(id).onchange = recalc; });
+
+    $('manage-catalog-btn').onclick = () => { $('catalog-modal').classList.add('open'); renderCatalog(); };
+    $('close-catalog-btn').onclick = () => { $('catalog-modal').classList.remove('open'); };
+    $('refresh-catalog-btn').onclick = async () => { await loadServerCatalog(false); };
+
+    $('settings-btn').onclick = () => {
+      $('user-name-input').value = userName;
+      $('gas-url-input').value = gasUrl;
+      $('gas-token-input').value = gasToken;
+      $('settings-modal').classList.add('open');
+    };
+    $('close-settings-btn').onclick = () => { $('settings-modal').classList.remove('open'); };
+
+    $('save-gas-btn').onclick = async () => {
+      userName = $('user-name-input').value.trim();
+      gasUrl = $('gas-url-input').value.trim();
+      gasToken = $('gas-token-input').value.trim();
+      saveGas(); saveUserName(); updateBanner();
+      setStatus('Settings saved.', 'success');
+      if (gasUrl && gasToken){ await peekServerRef(); await loadServerCatalog(true); }
+    };
+
+    $('test-connection-btn').onclick = async () => {
+      const url = $('gas-url-input').value.trim();
+      const token = $('gas-token-input').value.trim();
+      if (!url || !token){ setStatus('Enter URL and token first', 'error'); return; }
+      setStatus('Testing connection...');
+      try {
+        const res = await fetch(url + '?token=' + encodeURIComponent(token));
+        const json = await res.json();
+        if (json.ok) setStatus('Connection works: ' + json.message, 'success');
+        else setStatus('Failed: ' + (json.error || 'unknown'), 'error');
+      } catch(err){ setStatus('Connection error: ' + err.message, 'error'); }
+    };
+
+    $('refresh-counter-btn').onclick = async () => {
+      try { const r = await peekServerRef(); if (r){ $('next-num-input').value = r.num; setStatus('Refreshed from server. Next: ' + r.nextRef, 'success'); } }
+      catch(err){ setStatus('Refresh failed: ' + err.message, 'error'); }
+    };
+
+    $('save-counter-btn').onclick = async () => {
+      const num = parseInt($('next-num-input').value);
+      if (!num || num < 1){ setStatus('Valid number required', 'error'); return; }
+      try { await gasCall('set_ref', {num: String(num)}); await peekServerRef(); setStatus('Server counter set to ' + num, 'success'); }
+      catch(err){ setStatus('Set failed: ' + err.message, 'error'); }
+    };
+
+    $('preview-btn').onclick = () => {
+      if (!lineItems.length){ setStatus('Add at least one line item first', 'error'); return; }
+      const {doc} = buildPdf();
+      window.open(URL.createObjectURL(doc.output('blob')), '_blank');
+      setStatus('Preview opened. Counter does not advance on preview.');
+    };
+
+    $('download-btn').onclick = () => {
+      if (!lineItems.length){ setStatus('Add at least one line item first', 'error'); return; }
+      if (!$('bill-to').value.trim()){ setStatus('Customer name (Bill to) is required', 'error'); return; }
+      const {doc, ref} = buildPdf();
+      doc.save(ref + '.pdf');
+      localNextNum += 1; saveLocalNum();
+      if (!serverRefSynced){ $('ref-number').value = refStr(localNextNum); $('ref-display').textContent = refStr(localNextNum); }
+      setStatus('Downloaded ' + ref + '.pdf. (Local counter — does not affect team counter.)', 'success');
+    };
+
+    $('submit-btn').onclick = async () => {
+      if (!lineItems.length){ setStatus('Add at least one line item first', 'error'); return; }
+      if (!$('bill-to').value.trim()){ setStatus('Customer name (Bill to) is required', 'error'); return; }
+      if (!gasUrl || !gasToken){ setStatus('Configure Drive integration in Settings first', 'error'); return; }
+
+      const submitBtn = $('submit-btn');
+      submitBtn.disabled = true;
+      setStatus('Reserving reference number...');
+      let assignedRef;
+      try { const r = await gasCall('reserve_ref'); assignedRef = r.ref; }
+      catch(err){ setStatus('Failed to reserve reference: ' + err.message, 'error'); submitBtn.disabled = false; return; }
+
+      $('ref-number').value = assignedRef;
+      $('ref-display').textContent = assignedRef;
+
+      setStatus('Generating PDF with reserved ref ' + assignedRef + '...');
+      const {doc, ref} = buildPdf(assignedRef);
+      const filename = ref + '.pdf';
+
+      setStatus('Uploading to Drive...');
+      try {
+        const result = await uploadToDrive(filename, pdfToBase64(doc));
+        await peekServerRef();
+        const link = document.createElement('a');
+        link.href = result.fileUrl; link.target = '_blank'; link.textContent = result.fileUrl;
+        $('status-msg').innerHTML = '';
+        $('status-msg').className = 'status success';
+        $('status-msg').appendChild(document.createTextNode('Saved to Drive as ' + filename + ': '));
+        $('status-msg').appendChild(link);
+      } catch(err){
+        setStatus('Upload failed: ' + err.message + '. Ref ' + assignedRef + ' was consumed by the reservation — contact admin to recover.', 'error');
+      } finally {
+        submitBtn.disabled = false;
+      }
+    };
+
+    document.querySelectorAll('.modal-backdrop').forEach(m => {
+      m.onclick = (e) => { if (e.target === m) m.classList.remove('open'); };
+    });
+  }
+
+  loadLocal();
+  init();
+})();
+</script>
+
+</body>
+</html>
